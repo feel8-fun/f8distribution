@@ -1,0 +1,36 @@
+name: Assemble published release
+on:
+  workflow_dispatch:
+    inputs:
+      release_lock:
+        description: Hash-pinned release lock path in this repository
+        required: true
+      platform:
+        type: choice
+        options: [linux-x86_64, windows-x86_64]
+        default: linux-x86_64
+jobs:
+  assemble:
+    runs-on: ${{ inputs.platform == 'windows-x86_64' && 'windows-latest' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: prefix-dev/setup-pixi@v0.9.4
+        with:
+          pixi-version: v0.81.0
+      - name: Assemble pinned artifacts
+        shell: pwsh
+        env:
+          F8_RELEASE_LOCK: ${{ inputs.release_lock }}
+        run: pixi run --locked assemble "$env:F8_RELEASE_LOCK"
+      - name: Verify relocated offline bootstrap
+        shell: pwsh
+        env:
+          F8_RELEASE_PLATFORM: ${{ inputs.platform }}
+        run: |
+          $suffix = if ($IsWindows) { 'zip' } else { 'tar.gz' }
+          pixi run --locked verify "build/dist/f8-$env:F8_RELEASE_PLATFORM.$suffix"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: f8-${{ inputs.platform }}
+          path: build/dist/f8-${{ inputs.platform }}.*
+          if-no-files-found: error
